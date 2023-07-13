@@ -18,6 +18,12 @@
 #include "orafce.h"
 #include "builtins.h"
 
+#if PG_VERSION_NUM >= 160000
+
+#include "varatt.h"
+
+#endif
+
 PG_FUNCTION_INFO_V1(dbms_random_initialize);
 PG_FUNCTION_INFO_V1(dbms_random_normal);
 PG_FUNCTION_INFO_V1(dbms_random_random);
@@ -196,7 +202,7 @@ dbms_random_string(PG_FUNCTION_ARGS)
 	const char *lower_only = "abcdefghijklmnopqrstuvwxyz";
 	const char *upper_only = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 	const char *upper_alphanum = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-	const char *printable = "`1234567890-=qwertyuiop[]asdfghjkl;'zxcvbnm,./!@#$%^&*()_+QWERTYUIOP{}|ASDFGHJKL:\"ZXCVVBNM<>? ";
+	const char *printable = "`1234567890-=qwertyuiop[]asdfghjkl;'zxcvbnm,./!@#$%^&*()_+QWERTYUIOP{}|ASDFGHJKL:\"ZXCVVBNM<>? \\~";
 
 	if (PG_ARGISNULL(0) || PG_ARGISNULL(1))
 		ereport(ERROR,

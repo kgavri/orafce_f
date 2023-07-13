@@ -13,7 +13,6 @@
 #include "catalog/pg_type.h"
 #include "executor/spi.h"
 #include "lib/stringinfo.h"
-#include "nodes/pg_list.h"
 #include "parser/parse_coerce.h"
 #include "parser/scansup.h"
 #include "utils/array.h"
@@ -46,7 +45,7 @@ typedef struct
 	int16		typlen;
 
 	bool		isnull;
-	int			varno;		/* number of assigned placeholder of parsed query */
+	unsigned int varno;		/* number of assigned placeholder of parsed query */
 	bool		is_array;	/* true, when a value is assigned via bind_array */
 	Oid			typelemid;	/* Oid of element of a array */
 	bool		typelembyval;
@@ -68,7 +67,7 @@ typedef struct
 	int32		typmod;
 	bool		typisstr;
 	Oid			typarrayoid;		/* oid of requested array output value */
-	int			rowcount;			/* maximal rows of requested array */
+	uint64		rowcount;			/* maximal rows of requested array */
 	int			index1;				/* output array should be rewrited from this index */
 } ColumnData;
 
@@ -107,7 +106,7 @@ typedef struct
 	int16		cid;
 	char	   *parsed_query;
 	char	   *original_query;
-	int			nvariables;
+	unsigned int nvariables;
 	int			max_colpos;
 	List	   *variables;
 	List	   *columns;
@@ -122,13 +121,13 @@ typedef struct
 	TupleDesc	coltupdesc;
 	TupleDesc	tupdesc;
 	CastCacheData *casts;
-	int			processed;
-	int			nread;
-	int			start_read;
+	uint64		processed;
+	uint64		nread;
+	uint64		start_read;
 	bool		assigned;
 	bool		executed;
 	Bitmapset  *array_columns;		/* set of array columns */
-	int			batch_rows;			/* how much rows should be fetched to fill target arrays */
+	uint64		batch_rows;			/* how much rows should be fetched to fill target arrays */
 } CursorData;
 
 typedef enum
@@ -145,9 +144,9 @@ typedef enum
 	TOKEN_DOUBLE_COLON,
 	TOKEN_OTHER,
 	TOKEN_NONE
-} TokenType;
+} orafceTokenType;
 
-static char *next_token(char *str, char **start, size_t *len, TokenType *typ, char **sep, size_t *seplen);
+static char *next_token(char *str, char **start, size_t *len, orafceTokenType *typ, char **sep, size_t *seplen);
 
 PG_FUNCTION_INFO_V1(dbms_sql_is_open);
 PG_FUNCTION_INFO_V1(dbms_sql_open_cursor);
@@ -169,7 +168,7 @@ PG_FUNCTION_INFO_V1(dbms_sql_describe_columns);
 PG_FUNCTION_INFO_V1(dbms_sql_describe_columns_f);
 PG_FUNCTION_INFO_V1(dbms_sql_debug_cursor);
 
-static int last_row_count = 0;
+static uint64 last_row_count = 0;
 static MemoryContext	persist_cxt = NULL;
 static CursorData		cursors[MAX_CURSORS];
 
@@ -209,7 +208,7 @@ dbms_sql_open_cursor(PG_FUNCTION_ARGS)
 		{
 			open_cursor(&cursors[i], i);
 
-			return i;
+			PG_RETURN_INT32(i);
 		}
 	}
 
@@ -218,6 +217,9 @@ dbms_sql_open_cursor(PG_FUNCTION_ARGS)
 			 errmsg("too many opened cursors"),
 			 errdetail("There is not free slot for new dbms_sql's cursor."),
 			 errhint("You should to close unused cursors")));
+
+	/* be msvc quiet */
+	return (Datum) 0;
 }
 
 static CursorData *
@@ -388,6 +390,9 @@ get_var(CursorData *c, char *refname, int position, bool append)
 		ereport(ERROR,
 				(errcode(ERRCODE_UNDEFINED_PARAMETER),
 				 errmsg("variable \"%s\" doesn't exists", refname)));
+
+	/* be msvc quite */
+	return NULL;
 }
 
 /*
@@ -400,7 +405,7 @@ dbms_sql_parse(PG_FUNCTION_ARGS)
 			   *ptr;
 	char	   *start;
 	size_t		len;
-	TokenType	typ;
+	orafceTokenType	typ;
 	StringInfoData	sinfo;
 	CursorData *c;
 	MemoryContext oldcxt;
@@ -442,8 +447,8 @@ dbms_sql_parse(PG_FUNCTION_ARGS)
 			}
 			else if (typ == TOKEN_BIND_VAR)
 			{
-				char	   *name = downcase_identifier(start, len, false, true);
-				VariableData *var = get_var(c, name, ptr - query, true);
+				char	   *name = downcase_identifier(start, (int) len, false, true);
+				VariableData *var = get_var(c, name, (int) (ptr - query), true);
 
 				appendStringInfo(&sinfo, "$%d", var->varno);
 
@@ -506,7 +511,7 @@ bind_variable(PG_FUNCTION_ARGS)
 	if (*varname == ':')
 		varname += 1;
 
-	varname_downcase = downcase_identifier(varname, strlen(varname), false, true);
+	varname_downcase = downcase_identifier(varname, (int) strlen(varname), false, true);
 	var = get_var(c, varname_downcase, -1, false);
 
 	valtype = get_fn_expr_argtype(fcinfo->flinfo, 2);
@@ -594,7 +599,7 @@ bind_array(FunctionCallInfo fcinfo, int index1, int index2)
 	if (*varname == ':')
 		varname += 1;
 
-	varname_downcase = downcase_identifier(varname, strlen(varname), false, true);
+	varname_downcase = downcase_identifier(varname, (int) strlen(varname), false, true);
 	var = get_var(c, varname_downcase, -1, false);
 
 	valtype = get_fn_expr_argtype(fcinfo->flinfo, 2);
@@ -717,6 +722,9 @@ get_col(CursorData *c, int position, bool append)
 		ereport(ERROR,
 				(errcode(ERRCODE_UNDEFINED_COLUMN),
 				 errmsg("column no %d is not defined", position)));
+
+	/* be msvc quite */
+	return NULL;
 }
 
 /*
@@ -774,6 +782,8 @@ dbms_sql_define_column(PG_FUNCTION_ARGS)
 	col->typmod = (col->typisstr && colsize != -1) ? colsize + 4 : -1;
 
 	get_typlenbyval(basetype, &col->typlen, &col->typbyval);
+
+	col->rowcount = 1;
 
 	return (Datum) 0;
 }
@@ -843,7 +853,7 @@ dbms_sql_define_array(PG_FUNCTION_ARGS)
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("cnt is less or equal to zero")));
 
-	col->rowcount = rowcount;
+	col->rowcount = (uint64) rowcount;
 
 	if (PG_ARGISNULL(4))
 		ereport(ERROR,
@@ -885,7 +895,7 @@ cursor_xact_cxt_deletion_callback(void *arg)
 	cur->array_columns = NULL;
 }
 
-static long
+static uint64
 execute(CursorData *c)
 {
 	last_row_count = 0;
@@ -936,11 +946,11 @@ execute(CursorData *c)
 	{
 		Datum	   *values;
 		Oid		   *types;
-		char *nulls;
+		char	   *nulls;
 		ListCell   *lc;
-		int		i;
+		int			i;
 		MemoryContext oldcxt;
-		int			batch_rows = -1;
+		uint64		batch_rows = 0;
 
 		oldcxt = MemoryContextSwitchTo(c->cursor_xact_cxt);
 
@@ -999,10 +1009,13 @@ execute(CursorData *c)
 
 			snprintf(genname, 32, "col%d", i);
 
+			Assert(col->rowcount > 0);
+
 			if (col->typarrayoid)
 			{
-				if (batch_rows != -1)
-					batch_rows = batch_rows > col->rowcount ? col->rowcount : batch_rows;
+
+				if (batch_rows != 0)
+					batch_rows = col->rowcount < batch_rows ? col->rowcount : batch_rows;
 				else
 					batch_rows = col->rowcount;
 
@@ -1018,7 +1031,8 @@ execute(CursorData *c)
 		}
 
 		c->batch_rows = batch_rows;
-		c->casts = palloc0(sizeof(CastCacheData) * c->coltupdesc->natts);
+		Assert(c->coltupdesc->natts >= 0);
+		c->casts = palloc0(sizeof(CastCacheData) * ((unsigned int) c->coltupdesc->natts));
 
 		MemoryContextSwitchTo(oldcxt);
 
@@ -1029,7 +1043,7 @@ execute(CursorData *c)
 
 		c->portal = SPI_cursor_open_with_args(c->cursorname,
 											  c->parsed_query,
-											  c->nvariables,
+											  (int) c->nvariables,
 											  types,
 											  values,
 											  nulls,
@@ -1080,7 +1094,7 @@ execute(CursorData *c)
 		int			max_index1 = -1;
 		int			min_index2 = -1;
 		int			max_rows = -1;
-		long		result = 0;
+		uint64		result = 0;
 		ListCell   *lc;
 		int			i;
 
@@ -1108,7 +1122,7 @@ execute(CursorData *c)
 				types[i++] = var->is_array ? var->typelemid : var->typoid;
 			}
 
-			plan = SPI_prepare(c->parsed_query, c->nvariables, types);
+			plan = SPI_prepare(c->parsed_query, (int) c->nvariables, types);
 
 			if (!plan)
 				/* internal error */
@@ -1292,13 +1306,13 @@ dbms_sql_execute(PG_FUNCTION_ARGS)
 
 	c = get_cursor(fcinfo, true);
 
-	PG_RETURN_INT64(execute(c));
+	PG_RETURN_INT64((int64) execute(c));
 }
 
-static int
+static uint64
 fetch_rows(CursorData *c, bool exact)
 {
-	int		can_read_rows;
+	uint64		can_read_rows;
 
 	if (!c->executed)
 		ereport(ERROR,
@@ -1608,8 +1622,8 @@ column_value(CursorData *c, int pos, Oid targetTypeId, bool *isnull, bool spi_tr
 	if (ccast->is_array)
 	{
 		ArrayBuildState *abs;
-		int		idx;
-		int		i;
+		uint64		idx;
+		uint64		i;
 
 		abs = initArrayResult(columnTypeId, CurrentMemoryContext, false);
 
@@ -1790,7 +1804,7 @@ is_identif(unsigned char c)
  * simple parser to detect :identif symbols in query
  */
 static char *
-next_token(char *str, char **start, size_t *len, TokenType *typ, char **sep, size_t *seplen)
+next_token(char *str, char **start, size_t *len, orafceTokenType *typ, char **sep, size_t *seplen)
 {
 	if (*str == '\0')
 	{
@@ -1805,12 +1819,14 @@ next_token(char *str, char **start, size_t *len, TokenType *typ, char **sep, siz
 		while (*str == ' ')
 			str++;
 
-		*typ = TOKEN_SPACES; *len = 1;
+		*typ = TOKEN_SPACES;
+		*len = 1;
 		return str;
 	}
 
 	/* Postgres's dolar strings */
-	if (*str == '$' && (str[1] == '$' || is_identif(str[1]) || str[1] == '_'))
+	if (*str == '$' && (str[1] == '$' ||
+		is_identif((unsigned char) str[1]) || str[1] == '_'))
 	{
 		char	   *aux = str + 1;
 		char	   *endstr;
@@ -1826,7 +1842,7 @@ next_token(char *str, char **start, size_t *len, TokenType *typ, char **sep, siz
 				aux++;
 				break;
 			}
-			else if (is_identif(*aux) ||
+			else if (is_identif((unsigned char) *aux) ||
 					 isdigit(*aux) ||
 					 *aux == '_')
 			{
@@ -1838,30 +1854,37 @@ next_token(char *str, char **start, size_t *len, TokenType *typ, char **sep, siz
 
 		if (!is_valid)
 		{
-			*typ = TOKEN_OTHER; *len = 1;
+			*typ = TOKEN_OTHER;
+			*len = 1;
 			*start = str;
 			return str + 1;
 		}
 
 		/* now it looks like correct $ separator */
-		*start = aux; *sep = str; *seplen = aux - str; *typ = TOKEN_DOLAR_STR;
+		*start = aux; *sep = str;
+		Assert(aux >= str);
+		*seplen = (size_t) (aux - str);
+		*typ = TOKEN_DOLAR_STR;
 
 		/* try to find second instance */
 		buffer = palloc(*seplen + 1);
-		strncpy(buffer, *sep, *seplen);
+		memcpy(buffer, *sep, *seplen);
 		buffer[*seplen] = '\0';
 
 		endstr = strstr(aux, buffer);
 		if (endstr)
 		{
-			*len = endstr - *start;
+			Assert(endstr >= *start);
+			*len = (size_t) (endstr - *start);
 			return endstr + *seplen;
 		}
 		else
 		{
 			while (*aux)
 				aux++;
-			*len = aux - *start;
+
+			Assert(aux >= *start);
+			*len = (size_t) (aux - *start);
 			return aux;
 		}
 
@@ -1881,7 +1904,9 @@ next_token(char *str, char **start, size_t *len, TokenType *typ, char **sep, siz
 			}
 			str++;
 		}
-		*typ = TOKEN_COMMENT; *len = str - *start;
+		*typ = TOKEN_COMMENT;
+		Assert(str >= *start);
+		*len = (size_t) (str - *start);
 		return str;
 	}
 
@@ -1902,32 +1927,38 @@ next_token(char *str, char **start, size_t *len, TokenType *typ, char **sep, siz
 			else
 				break;
 		}
-		*typ = TOKEN_NUMBER; *len = str - *start;
+		*typ = TOKEN_NUMBER;
+		Assert(str >= *start);
+		*len = (size_t) (str - *start);
 		return str;
 	}
 
 	/* Double colon :: */
 	if (*str == ':' && str[1] == ':')
 	{
-		*start = str; *typ = TOKEN_DOUBLE_COLON; *len = 2;
+		*start = str;
+		*typ = TOKEN_DOUBLE_COLON;
+		*len = 2;
 		return str + 2;
 	}
 
 	/* Bind variable placeholder */
 	if (*str == ':' &&
-		(is_identif(str[1]) || str[1] == '_'))
+		(is_identif((unsigned char) str[1]) || str[1] == '_'))
 	{
 		*start = &str[1]; str += 2;
 		while (*str)
 		{
-			if (is_identif(*str) ||
+			if (is_identif((unsigned char) *str) ||
 				isdigit(*str) ||
 				*str == '_')
 				str++;
 			else
 				break;
 		}
-		*typ = TOKEN_BIND_VAR; *len = str - *start;
+		*typ = TOKEN_BIND_VAR;
+		Assert(str >= *start);
+		*len = (size_t) (str - *start);
 		return str;
 	}
 
@@ -1939,7 +1970,9 @@ next_token(char *str, char **start, size_t *len, TokenType *typ, char **sep, siz
 		{
 			if (*str == '\'')
 			{
-				*typ = TOKEN_EXT_STR; *len = str - *start;
+				*typ = TOKEN_EXT_STR;
+				Assert(str >= *start);
+				*len = (size_t) (str - *start);
 				return str + 1;
 			}
 			if (*str == '\\' && str[1] == '\'')
@@ -1950,7 +1983,9 @@ next_token(char *str, char **start, size_t *len, TokenType *typ, char **sep, siz
 				str += 1;
 		}
 
-		*typ = TOKEN_EXT_STR; *len = str - *start;
+		*typ = TOKEN_EXT_STR;
+		Assert(str >= *start);
+		*len = (size_t) (str - *start);
 		return str;
 	}
 
@@ -1964,7 +1999,9 @@ next_token(char *str, char **start, size_t *len, TokenType *typ, char **sep, siz
 			{
 				if (str[1] != '\'')
 				{
-					*typ = TOKEN_STR; *len = str - *start;
+					*typ = TOKEN_STR;
+					Assert(str >= *start);
+					*len = (size_t) (str - *start);
 					return str + 1;
 				}
 				str += 2;
@@ -1972,7 +2009,9 @@ next_token(char *str, char **start, size_t *len, TokenType *typ, char **sep, siz
 			else
 				str += 1;
 		}
-		*typ = TOKEN_STR; *len = str - *start;
+		*typ = TOKEN_STR;
+		Assert(str >= *start);
+		*len = (size_t) (str - *start);
 		return str;
 	}
 
@@ -1986,7 +2025,9 @@ next_token(char *str, char **start, size_t *len, TokenType *typ, char **sep, siz
 			{
 				if (str[1] != '"')
 				{
-					*typ = TOKEN_QIDENTIF; *len = str - *start;
+					*typ = TOKEN_QIDENTIF;
+					Assert(str >= *start);
+					*len = (size_t) (str - *start);
 					return str + 1;
 				}
 				str += 2;
@@ -1994,29 +2035,35 @@ next_token(char *str, char **start, size_t *len, TokenType *typ, char **sep, siz
 			else
 				str += 1;
 		}
-		*typ = TOKEN_QIDENTIF; *len = str - *start;
+		*typ = TOKEN_QIDENTIF;
+		Assert(str >= *start);
+		*len = (size_t) (str - *start);
 		return str;
 	}
 
 	/* Identifiers */
-	if (is_identif(*str) || *str == '_')
+	if (is_identif((unsigned char) *str) || *str == '_')
 	{
 		*start = str++;
 		while (*str)
 		{
-			if (is_identif(*str) ||
+			if (is_identif((unsigned char) *str) ||
 				isdigit(*str) ||
 				*str == '_')
 				str++;
 			else
 				break;
 		}
-		*typ = TOKEN_IDENTIF; *len = str - *start;
+		*typ = TOKEN_IDENTIF;
+		Assert(str >= *start);
+		*len = (size_t) (str - *start);
 		return str;
 	}
 
 	/* Others */
-	*typ = TOKEN_OTHER; *start = str; *len = 1;
+	*typ = TOKEN_OTHER;
+	*start = str;
+	*len = 1;
 	return str + 1;
 }
 
@@ -2093,7 +2140,7 @@ dbms_sql_describe_columns(PG_FUNCTION_ARGS)
 	if ((rc = SPI_connect_ext(nonatomic ? SPI_OPT_NONATOMIC : 0)) != SPI_OK_CONNECT)
 		elog(ERROR, "SPI_connect failed: %s", SPI_result_code_string(rc));
 
-	plan = SPI_prepare(c->parsed_query, c->nvariables, types);
+	plan = SPI_prepare(c->parsed_query, (int) c->nvariables, types);
 	if (!plan || plan->magic != _SPI_PLAN_MAGIC)
 		elog(ERROR, "plan is not valid");
 

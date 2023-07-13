@@ -3,7 +3,7 @@
   free available library PL/Vision. Please look www.quest.com
 
   Original author: Steven Feuerstein, 1996 - 2002
-  PostgreSQL implementation author: Pavel Stehule, 2006-2022
+  PostgreSQL implementation author: Pavel Stehule, 2006-2023
 
   This module is under BSD Licence
 
@@ -214,7 +214,7 @@ ora_instr_mb(text *txt, text *pattern, int start, int nth)
 		if (beg >= end)
 			return 0;	/* out of range */
 	}
-	else
+	else if (start < 0)
 	{
 		dx = -1;
 		beg = Min(c_len_txt + start, c_len_txt - c_len_pat);
@@ -222,6 +222,8 @@ ora_instr_mb(text *txt, text *pattern, int start, int nth)
 		if (beg <= end)
 			return 0;	/* out of range */
 	}
+	else
+		return 0;
 
 	for (i = beg; i != end; i += dx)
 	{
@@ -263,7 +265,7 @@ ora_instr(text *txt, text *pattern, int start, int nth)
 		if (beg >= end)
 			return 0;	/* out of range */
 	}
-	else
+	else if (start < 0)
 	{
 		dx = -1;
 		beg = Min(len_txt + start, len_txt - len_pat);
@@ -271,6 +273,8 @@ ora_instr(text *txt, text *pattern, int start, int nth)
 		if (beg <= end)
 			return 0;	/* out of range */
 	}
+	else
+		return 0;
 
 	for (i = beg; i != end; i += dx)
 	{

@@ -2043,7 +2043,7 @@ COMMENT ON FUNCTION dbms_random.seed(text) IS 'Reset the seed value';
 CREATE FUNCTION dbms_random.string(opt text, len int)
 RETURNS text
 AS 'MODULE_PATHNAME','dbms_random_string'
-LANGUAGE C IMMUTABLE;
+LANGUAGE C VOLATILE;
 COMMENT ON FUNCTION dbms_random.string(text,int) IS 'Create Random Strings';
 
 CREATE FUNCTION dbms_random.terminate()
@@ -3646,7 +3646,7 @@ AS $$
   -- newline-sensitivity but not ^ and $ search.
   SELECT CASE WHEN (count(*) > 0) THEN true ELSE false END FROM regexp_matches($1, $2, 'p');
 $$
-LANGUAGE 'sql' STRICT;
+LANGUAGE 'sql' STRICT IMMUTABLE;
 
 -- REGEXP_LIKE( string text, pattern text, flags text ) -> boolean
 CREATE OR REPLACE FUNCTION oracle.regexp_like(text, text, text)
@@ -3666,7 +3666,7 @@ BEGIN
   RETURN false;
 END;
 $$
-LANGUAGE plpgsql;
+LANGUAGE plpgsql IMMUTABLE;
 
 -- REGEXP_COUNT( string text, pattern text ) -> integer
 CREATE OR REPLACE FUNCTION oracle.regexp_count(text, text)
@@ -3677,7 +3677,7 @@ AS $$
   -- newline-sensitivity but not ^ and $ search.
   SELECT count(*)::integer FROM regexp_matches($1, $2, 'pg');
 $$
-LANGUAGE 'sql' STRICT;
+LANGUAGE 'sql' STRICT IMMUTABLE;
 
 -- REGEXP_COUNT( string text, pattern text, position int ) -> integer
 CREATE OR REPLACE FUNCTION oracle.regexp_count(text, text, integer)
@@ -3698,7 +3698,7 @@ BEGIN
   RETURN v_cnt;
 END;
 $$
-LANGUAGE plpgsql STRICT;
+LANGUAGE plpgsql STRICT IMMUTABLE;
 
 -- REGEXP_COUNT( string text, pattern text, position int, flags text ) -> integer
 CREATE OR REPLACE FUNCTION oracle.regexp_count(text, text, integer, text)
@@ -3722,43 +3722,43 @@ BEGIN
   RETURN v_cnt;
 END;
 $$
-LANGUAGE plpgsql;
+LANGUAGE plpgsql IMMUTABLE;
 
 --  REGEXP_INSTR( string text, pattern text ) -> integer
 CREATE OR REPLACE FUNCTION oracle.regexp_instr(text, text)
 RETURNS integer
 AS 'MODULE_PATHNAME','orafce_regexp_instr_no_start'
-LANGUAGE 'c' IMMUTABLE;
+LANGUAGE 'c' IMMUTABLE PARALLEL SAFE;
 
 --  REGEXP_INSTR( string text, pattern text, position int ) -> integer
 CREATE OR REPLACE FUNCTION oracle.regexp_instr(text, text, integer)
 RETURNS integer
 AS 'MODULE_PATHNAME','orafce_regexp_instr_no_n'
-LANGUAGE 'c' IMMUTABLE;
+LANGUAGE 'c' IMMUTABLE PARALLEL SAFE;
 
 --  REGEXP_INSTR( string text, pattern text, position int, occurence int ) -> integer
 CREATE OR REPLACE FUNCTION oracle.regexp_instr(text, text, integer, integer)
 RETURNS integer
 AS 'MODULE_PATHNAME','orafce_regexp_instr_no_endoption'
-LANGUAGE 'c' IMMUTABLE;
+LANGUAGE 'c' IMMUTABLE PARALLEL SAFE;
 
 --  REGEXP_INSTR( string text, pattern text, position int, occurence int, return_opt int ) -> integer
 CREATE OR REPLACE FUNCTION oracle.regexp_instr(text, text, integer, integer, integer)
 RETURNS integer
 AS 'MODULE_PATHNAME','orafce_regexp_instr_no_flags'
-LANGUAGE 'c' IMMUTABLE;
+LANGUAGE 'c' IMMUTABLE PARALLEL SAFE;
 
 --  REGEXP_INSTR( string text, pattern text, position int, occurence int, return_opt int, flags text ) -> integer
 CREATE OR REPLACE FUNCTION oracle.regexp_instr(text, text, integer, integer, integer, text)
 RETURNS integer
 AS 'MODULE_PATHNAME','orafce_regexp_instr_no_subexpr'
-LANGUAGE 'c' IMMUTABLE;
+LANGUAGE 'c' IMMUTABLE PARALLEL SAFE;
 
 --  REGEXP_INSTR( string text, pattern text, position int, occurence int, return_opt int, flags text, group int ) -> integer
 CREATE OR REPLACE FUNCTION oracle.regexp_instr(text, text, integer, integer, integer, text, integer)
 RETURNS integer
 AS 'MODULE_PATHNAME','orafce_regexp_instr'
-LANGUAGE 'c' IMMUTABLE;
+LANGUAGE 'c' IMMUTABLE PARALLEL SAFE;
 
 -- REGEXP_SUBSTR( string text, pattern text ) -> text
 CREATE OR REPLACE FUNCTION oracle.regexp_substr(text, text)
@@ -3780,7 +3780,7 @@ BEGIN
   RETURN v_substr;
 END;
 $$
-LANGUAGE plpgsql STRICT;
+LANGUAGE plpgsql STRICT IMMUTABLE;
 
 -- REGEXP_SUBSTR( string text, pattern text, position int ) -> text
 CREATE OR REPLACE FUNCTION oracle.regexp_substr(text, text, int)
@@ -3807,7 +3807,7 @@ BEGIN
   RETURN v_substr;
 END;
 $$
-LANGUAGE plpgsql STRICT;
+LANGUAGE plpgsql STRICT IMMUTABLE;
 
 -- REGEXP_SUBSTR( string text, pattern text, position int, occurence int ) -> text
 CREATE OR REPLACE FUNCTION oracle.regexp_substr(text, text, integer, integer)
@@ -3837,7 +3837,7 @@ BEGIN
   RETURN v_substr;
 END;
 $$
-LANGUAGE plpgsql STRICT;
+LANGUAGE plpgsql STRICT IMMUTABLE;
 
 -- REGEXP_SUBSTR( string text, pattern text, position int, occurence int, flags text ) -> text
 CREATE OR REPLACE FUNCTION oracle.regexp_substr(text, text, integer, integer, text)
@@ -3874,7 +3874,7 @@ BEGIN
   RETURN v_substr;
 END;
 $$
-LANGUAGE plpgsql;
+LANGUAGE plpgsql IMMUTABLE;
 
 -- REGEXP_SUBSTR( string text, pattern text, position int, occurence int, flags text, group int ) -> text
 CREATE OR REPLACE FUNCTION oracle.regexp_substr(text, text, integer, integer, text, int)
@@ -3925,36 +3925,36 @@ BEGIN
   RETURN v_substr;
 END;
 $$
-LANGUAGE plpgsql;
+LANGUAGE plpgsql IMMUTABLE;
 
 -- REGEXP_REPLACE( string text, pattern text, replace_string text ) -> text
 CREATE OR REPLACE FUNCTION oracle.regexp_replace(text, text, text)
 RETURNS text
 AS 'MODULE_PATHNAME','orafce_textregexreplace_noopt'
-LANGUAGE 'c' IMMUTABLE;
+LANGUAGE 'c' IMMUTABLE PARALLEL SAFE;
 
 -- REGEXP_REPLACE( string text, pattern text, replace_string text, position int ) -> text
 CREATE OR REPLACE FUNCTION oracle.regexp_replace(text, text, text, integer)
 RETURNS text
 AS 'MODULE_PATHNAME','orafce_textregexreplace_extended_no_n'
-LANGUAGE 'c' IMMUTABLE;
+LANGUAGE 'c' IMMUTABLE PARALLEL SAFE;
 
 -- REGEXP_REPLACE( string text, pattern text, replace_string text, position int, occurence int ) -> text
 CREATE OR REPLACE FUNCTION oracle.regexp_replace(text, text, text, integer, integer)
 RETURNS text
 AS 'MODULE_PATHNAME','orafce_textregexreplace_extended_no_flags'
-LANGUAGE 'c' IMMUTABLE;
+LANGUAGE 'c' IMMUTABLE PARALLEL SAFE;
 
 -- REGEXP_REPLACE( string text, pattern text, replace_string text, position int, occurence int, flags text ) -> text
 CREATE OR REPLACE FUNCTION oracle.regexp_replace(text, text, text, integer, integer, text)
 RETURNS text
 AS 'MODULE_PATHNAME','orafce_textregexreplace_extended'
-LANGUAGE 'c' IMMUTABLE;
+LANGUAGE 'c' IMMUTABLE PARALLEL SAFE;
 
 CREATE OR REPLACE FUNCTION oracle.regexp_replace(text, text, text, text)
 RETURNS text
 AS 'MODULE_PATHNAME','orafce_textregexreplace'
-LANGUAGE 'c' IMMUTABLE;
+LANGUAGE 'c' IMMUTABLE PARALLEL SAFE;
 
 ----
 -- Add LEAST/GREATEST declaration to return NULL on NULL input.
@@ -4251,3 +4251,10 @@ CREATE TYPE dbms_sql.desc_rec AS (
 
 CREATE FUNCTION dbms_sql.describe_columns_f(c int, OUT col_cnt int, OUT desc_t dbms_sql.desc_rec[]) AS 'MODULE_PATHNAME', 'dbms_sql_describe_columns_f' LANGUAGE c;
 CREATE PROCEDURE dbms_sql.describe_columns(c int, INOUT col_cnt int, INOUT desc_t dbms_sql.desc_rec[]) AS 'MODULE_PATHNAME', 'dbms_sql_describe_columns_f' LANGUAGE c;
+
+SELECT pg_extension_config_dump('utl_file.utl_file_dir', '');
+
+CREATE OR REPLACE FUNCTION oracle.sys_guid()
+RETURNS bytea
+AS 'MODULE_PATHNAME','orafce_sys_guid'
+LANGUAGE C VOLATILE;

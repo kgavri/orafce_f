@@ -6,7 +6,7 @@
   with n days (n > 10000), can be slow (on my P4 31ms).
 
   Original author: Steven Feuerstein, 1996 - 2002
-  PostgreSQL implementation author: Pavel Stehule, 2006-2022
+  PostgreSQL implementation author: Pavel Stehule, 2006-2023
 
   This module is under BSD Licence
 */
@@ -20,6 +20,12 @@
 #include <stdlib.h>
 #include "orafce.h"
 #include "builtins.h"
+
+#if PG_VERSION_NUM >= 160000
+
+#include "varatt.h"
+
+#endif
 
 PG_FUNCTION_INFO_V1(plvdate_add_bizdays);
 PG_FUNCTION_INFO_V1(plvdate_nearest_bizday);
